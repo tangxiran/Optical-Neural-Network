@@ -1,8 +1,10 @@
 import torch
 import numpy as np
-
+import math
 
 def detector_region(x):
+    # 最后的检测层
+    # 分为10块进行检测
     return torch.cat((
         x[:, 46 : 66, 46 : 66].mean(dim=(1, 2)).unsqueeze(-1),
         x[:, 46 : 66, 93 : 113].mean(dim=(1, 2)).unsqueeze(-1),
@@ -17,20 +19,21 @@ def detector_region(x):
 
 
 class DiffractiveLayer(torch.nn.Module):
-
+    # 初始化一个衍射层
     def __init__(self):
         super(DiffractiveLayer, self).__init__()
-        self.size = 200                         # 200 * 200 neurons in one layer
-        self.distance = 0.03                    # distance bewteen two layers (3cm)
-        self.ll = 0.08                          # layer length (8cm)
-        self.wl = 3e8 / 0.4e12                  # wave length
+        self.size = 200                         # 200 * 200 neurons in one layer 一层的单元数量
+        self.distance = 0.03                    # distance bewteen two layers (3cm) 每两个层之间的距离，单位为m
+        self.ll = 0.08                          # layer length (8cm)    层的大小0.08*0.08的正方形
+        self.wl = 3e8 / 0.4e12                  # wave length            激光波长
         self.fi = 1 / self.ll                   # frequency interval
-        self.wn = 2 * 3.1415926 / self.wl       # wave number
+        self.wn = 2 * math.pi / self.wl       # wave number
         # self.phi (200, 200)
         self.phi = np.fromfunction(
             lambda x, y: np.square((x - (self.size // 2)) * self.fi) + np.square((y - (self.size // 2)) * self.fi),
             shape=(self.size, self.size), dtype=np.complex64)
         # h (200, 200)
+        # 传播公式
         h = np.fft.fftshift(np.exp(1.0j * self.wn * self.distance) * np.exp(-1.0j * self.wl * np.pi * self.distance * self.phi))
         # self.h (200, 200, 2)
         self.h = torch.nn.Parameter(torch.stack((torch.from_numpy(h.real), torch.from_numpy(h.imag)), dim=-1), requires_grad=False)
@@ -48,13 +51,16 @@ class DiffractiveLayer(torch.nn.Module):
 
 class Net(torch.nn.Module):
     """
+    只训练相位
     phase only modulation
     """
+    # 共五层
     def __init__(self, num_layers=5):
 
         super(Net, self).__init__()
         # self.phase (200, 200)
-        self.phase = [torch.nn.Parameter(torch.from_numpy(2 * np.pi * np.random.random(size=(200, 200)).astype('float32'))) for _ in range(num_layers)]
+        self.phase = [torch.nn.Parameter(torch.from_numpy(
+            2 * np.pi * np.random.random(size=(200, 200)).astype('float32'))) for _ in range(num_layers)]
         for i in range(num_layers):
             self.register_parameter("phase" + "_" + str(i), self.phase[i])
         self.diffractive_layers = torch.nn.ModuleList([DiffractiveLayer() for _ in range(num_layers)])
@@ -78,3 +84,11 @@ class Net(torch.nn.Module):
 
 if __name__ == '__main__':
     print(Net())
+    net = Net()
+    net.eval()
+    mnist_Data = 1
+    out = net(mnist_Data)
+
+    data = torch.randn(size=(1,1,32,32))
+    out = net(data)
+    print("out.shape",out.shape)
