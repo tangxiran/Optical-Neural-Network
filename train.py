@@ -17,6 +17,7 @@ import onn
 
 os.environ["CUDA_VISIBLE_DEVICES"] = '8'
 
+device = "cpu"
 
 def main(args):
 
@@ -31,7 +32,9 @@ def main(args):
     val_dataloader = DataLoader(dataset=val_dataset, batch_size=args.batch_size, num_workers=112, shuffle=False, pin_memory=True)
 
     model = onn.Net()
-    model.cuda()
+
+    # model.cuda()
+    model.to(device)
 
     if args.whether_load_model:
         model.load_state_dict(torch.load(args.model_save_path + str(args.start_epoch) + args.model_name))
@@ -45,7 +48,8 @@ def main(args):
                 writer.writerow(
                     ['Epoch', 'Train_Loss', "Train_Acc", 'Val_Loss', "Val_Acc", "LR"])
 
-    criterion = torch.nn.MSELoss(reduction='sum').cuda()
+    # criterion = torch.nn.MSELoss(reduction='sum').cuda()
+    criterion = torch.nn.MSELoss(reduction='sum').to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     for epoch in range(args.start_epoch + 1, args.start_epoch + 1 + args.num_epochs):
@@ -61,8 +65,10 @@ def main(args):
         tk0 = tqdm(train_dataloader, ncols=100, total=int(len(train_dataloader)))
         for train_iter, train_data_batch in enumerate(tk0):
 
-            train_images = train_data_batch[0].cuda()           # (64, 1, 200, 200) float32 1. 0.
-            train_labels = train_data_batch[1].cuda()           # (1024, 10) int64 9 0
+            # train_images = train_data_batch[0].cuda()           # (64, 1, 200, 200) float32 1. 0.
+            train_images = train_data_batch[0].to(device)           # (64, 1, 200, 200) float32 1. 0.
+            # train_labels = train_data_batch[1].cuda()           # (1024, 10) int64 9 0
+            train_labels = train_data_batch[1].to(device)           # (1024, 10) int64 9 0
             train_images = F.pad(train_images, pad=(86, 86, 86, 86))
 
             train_labels = F.one_hot(train_labels, num_classes=10).float()
@@ -71,7 +77,7 @@ def main(args):
                                                     torch.zeros_like(train_images.unsqueeze(-1))), dim=-1), dim=1)
 
             train_outputs = model(train_images)
-
+    
             train_loss_ = criterion(train_outputs, train_labels)
             train_counter_ = torch.eq(torch.argmax(train_labels, dim=1), torch.argmax(train_outputs, dim=1)).float().sum()
 
@@ -103,8 +109,10 @@ def main(args):
             tk1 = tqdm(val_dataloader, ncols=100, total=int(len(val_dataloader)))
             for val_iter, val_data_batch in enumerate(tk1):
 
-                val_images = val_data_batch[0].cuda()  # (64, 1, 200, 200) float32 1. 0.
-                val_labels = val_data_batch[1].cuda()  # (1024, 10) int64 9 0
+                # val_images = val_data_batch[0].cuda()  # (64, 1, 200, 200) float32 1. 0.
+                val_images = val_data_batch[0].to(device)  # (64, 1, 200, 200) float32 1. 0.
+                # val_labels = val_data_batch[1].cuda()  # (1024, 10) int64 9 0
+                val_labels = val_data_batch[1].to(device)  # (1024, 10) int64 9 0
                 val_images = F.pad(val_images, pad=(86, 86, 86, 86))
                 val_labels = F.one_hot(val_labels, num_classes=10).float()
 
@@ -136,12 +144,17 @@ def main(args):
             writer = csv.writer(csvfile)
             writer.writerow(log)
 
+
+# https://ww2.mathworks.cn/matlabcentral/fileexchange/69292-d2nn?s_tid=srchtitle_d2nn_1
+# zsq的实现代码
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # 训练参数
     parser.add_argument('--batch-size', type=int, default=1024)
     parser.add_argument('--num-epochs', type=int, default=400)
     parser.add_argument('--seed', type=int, default=42)
+    # parser.add_argument('--seed', type=int, default=19970403)
     parser.add_argument('--lr', type=float, default=1e-3, help='学习率')
     parser.add_argument('--whether-load-model', type=bool, default=False, help="是否加载模型继续训练")
     parser.add_argument('--start-epoch', type=int, default=0, help='从哪个epoch继续训练')
